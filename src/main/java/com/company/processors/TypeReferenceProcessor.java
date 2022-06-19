@@ -9,7 +9,8 @@ import spoon.reflect.reference.CtTypeReference;
 public class TypeReferenceProcessor extends AbstractProcessor<CtReference> {
     @Override
     public void process(CtReference ctReference) {
-        if (ctReference instanceof CtTypeReference<?> ctTypeReference) {
+        if (ctReference instanceof CtTypeReference<?>) {
+            var ctTypeReference = (CtTypeReference<?>)ctReference;
             var parent = ctTypeReference.getParent(CtClass.class);
             if (parent != null && ctTypeReference.getPackage() != null) {
                 Graph.addDependencyForClass(parent.getQualifiedName(), ctTypeReference, false);

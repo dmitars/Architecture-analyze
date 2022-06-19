@@ -19,7 +19,7 @@ public class IfProcessor extends AbstractProcessor<CtIf> {
         if (className != null && method != null) {
             if (condition instanceof CtParameterReference<?>) {
                 Graph.addMethodToManagedByParams(className.getQualifiedName(), method.getSimpleName());
-            } else if (condition instanceof CtInvocation<Boolean>) {
+            } else if (condition instanceof CtInvocation<?>) {
                 CtExpression<?> invocation = condition;
                 while (invocation instanceof CtInvocation<?>) {
                     if (hasMethodParameterAsArgument((CtInvocation<?>) invocation)) {

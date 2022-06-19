@@ -39,7 +39,9 @@ public class Graph {
 
     public static void addDependencyForClass(String className, CtTypeReference<?> dependency, boolean isStatic) {
         if (dependency.getPackage() == null || className.equals(dependency.getQualifiedName())
-                || dependency.getQualifiedName().startsWith("java."))
+                || dependency.getQualifiedName().startsWith("java.") || className.startsWith("java.")
+                || className.endsWith(".var")
+                || dependency.getQualifiedName().endsWith(".var"))
             return;
 
         String dependencyName = dependency.getQualifiedName();
@@ -49,18 +51,23 @@ public class Graph {
         addNewDependency(outComponentInfo, inComponentInfo, value -> new DefaultDependency(value, isStatic));
     }
 
+
     public static void addMethodDependencyForClass(String className, CtTypeReference<?> dependency, CtInvocation<?> method) {
         if (dependency.getPackage() == null || className.equals(dependency.getQualifiedName())
-                || dependency.getQualifiedName().startsWith("java."))
+                || dependency.getQualifiedName().startsWith("java.") || className.startsWith("java.")
+                || className.endsWith(".var") || dependency.getQualifiedName().endsWith(".var"))
+            return;
+
+        if(method.getType() == null)
             return;
 
         String dependencyName = dependency.getQualifiedName();
         var outComponentInfo = components.getOrDefault(className, new ComponentInfo(className));
         var inComponentInfo = components.getOrDefault(dependencyName, new ComponentInfo(dependencyName));
 
-        HashSet<Dependency> dependencies = outComponentInfo.getStorageIngoing();
+        HashSet<Dependency> dependencies = outComponentInfo.getStorageOutgoing();
         var addedMethodDependency = dependencies.stream()
-                .filter(dependency1 -> dependency1 instanceof MethodsDependency && dependency1.getDependencyName().equals(className))
+                .filter(dependency1 -> dependency1 instanceof MethodsDependency && dependency1.getDependencyName().equals(dependency.getQualifiedName()))
                 .map(dependency1 -> (MethodsDependency) dependency1)
                 .findAny();
 
@@ -72,6 +79,9 @@ public class Graph {
 
         if (addedMethodDependency.isEmpty()) {
             addNewDependency(outComponentInfo, inComponentInfo, name -> new MethodsDependency(name, new HashSet<>(List.of(method))));
+        } else {
+            Optional<Dependency> any = inComponentInfo.getStorageIngoing().stream().filter(dep -> dep.getDependencyName().equals(className)).findAny();
+            any.ifPresent(value -> ((MethodsDependency)value).addMethodToDependencies(method));
         }
     }
 
@@ -89,6 +99,8 @@ public class Graph {
     }
 
     public static void markMethodAsFieldAccessor(String classname, String method, boolean isStatic) {
+        if (classname.startsWith("java."))
+            return;
         var classInfo = components.getOrDefault(classname, new ComponentInfo(classname));
         var methodsWithAssignment = isStatic ? classInfo.getMethodsWithStaticFieldsAssignment() : classInfo.getMethodsWithFieldsAssignment();
         methodsWithAssignment.add(method);
@@ -96,6 +108,8 @@ public class Graph {
     }
 
     public static void addMethodToManagedByParams(String classname, String methodName) {
+        if (classname.startsWith("java."))
+            return;
         var classInfo = components.getOrDefault(classname, new ComponentInfo(classname));
         var methodsManagedByParams = classInfo.getMethodsManagedByParams();
         methodsManagedByParams.add(methodName);
@@ -103,6 +117,8 @@ public class Graph {
     }
 
     public static void markClassAsStaticFieldAccessor(String classType, String qualifiedName) {
+        if (qualifiedName.startsWith("java."))
+            return;
         var classInfo = components.getOrDefault(qualifiedName, new ComponentInfo(qualifiedName));
         classInfo.getClassesWithStaticFieldsAssignment().add(classType);
         components.putIfAbsent(qualifiedName, classInfo);
@@ -110,7 +126,11 @@ public class Graph {
 
     private static Coherence recalculateCoherenceInAccordanceWith(MethodsDependency methodsDependency, CtInvocation<?> method) {
         var superMethod = method.getParent(CtExecutableReference.class);
-        var classOfMethod = method.getExecutable().getDeclaration().getParent(CtClass.class);
+        CtClass classOfMethod;
+        if (method.getExecutable().getDeclaration() == null)
+            classOfMethod = method.getExecutable().getParent(CtClass.class);
+        else
+            classOfMethod = method.getExecutable().getDeclaration().getParent(CtClass.class);
         if (classOfMethod != null) {
             List<?> classMembers = classOfMethod.getTypeMembers();
             var publicMethods = classMembers.stream().filter(member -> member instanceof CtMethodImpl<?>)
@@ -135,7 +155,6 @@ public class Graph {
 
     private static Coupling recalculateCouplingInAccordanceWith(String className, MethodsDependency methodsDependency, CtInvocation<?> method) {
         var computedCoupling = Coupling.DATA;
-
         if (isNotSimple(method.getType())) {
             computedCoupling = Coupling.EXTERNAL_LINKS;
         }
@@ -199,20 +218,27 @@ public class Graph {
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getStorageOutgoing()));
     }
 
-    public static void postProcess(CtModel model) {
-        components.values().stream()
-                .filter(entry -> ComponentInfoStatistic.instabilityOf(entry) < 0.8)
-                .forEach(entry -> entry.getStorageOutgoing().forEach(value -> pushElementsToDsu(entry.getClassName(), value.getDependencyName())));
+    public static void postProcess(CtModel model, Double threshold) {
+        upgradeVarietyOfChanges();
+        if (threshold != null) {
+            varieties.entrySet().stream()
+                    .filter(entry -> entry.getValue() >= threshold)
+                    .map(Map.Entry::getKey)
+                    .forEach(entry -> pushElementsToDsu(entry.getFirstClassName(), entry.getSecondClassName()));
+        } else {
+            components.values().stream()
+                    .filter(entry -> ComponentInfoStatistic.instabilityOf(entry) < 0.8)
+                    .forEach(entry -> entry.getStorageOutgoing().forEach(value -> pushElementsToDsu(entry.getClassName(), value.getDependencyName())));
+        }
         components.values().forEach(componentInfo -> componentInfo.getStorageOutgoing().removeIf(value -> !dsu.contains(value.getDependencyName())));
         components.keySet().removeIf(key -> !dsu.contains(key));
-        ifsCount = Query.getElements(model.getRootPackage(), new TypeFilter<>(CtIf.class)).size();
 
-        upgradeVarietyOfChanges();
+        ifsCount = Query.getElements(model.getRootPackage(), new TypeFilter<>(CtIf.class)).size();
         processCircularDependencies();
     }
 
     private static void upgradeVarietyOfChanges() {
-        var componentInfos = components.values().stream().toList();
+        var componentInfos = new ArrayList<>(components.values());
         for (int i = 0; i < componentInfos.size(); i++) {
             for (int j = i + 1; j < componentInfos.size(); j++) {
                 var component = componentInfos.get(i);

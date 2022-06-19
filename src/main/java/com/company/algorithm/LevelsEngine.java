@@ -30,7 +30,7 @@ public class LevelsEngine {
             var dependencies = storageOutgoing.getOrDefault(currentEntity, new HashSet<Dependency>()).stream()
                     .map(Dependency::getDependencyName)
                     .filter(dependencyName -> !abstractions.getOrDefault(dependencyName, new HashSet<>()).contains(currentEntity))
-                    .toList();
+                    .collect(Collectors.toList());
             result.get(level).addAll(dependencies);
             nextLevelEntities.addAll(dependencies.stream()
                     .flatMap(dependency -> abstractions.getOrDefault(dependency,new HashSet<>()).stream())

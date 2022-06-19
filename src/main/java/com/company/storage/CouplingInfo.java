@@ -3,6 +3,7 @@ package com.company.storage;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class CouplingInfo {
@@ -36,6 +37,6 @@ public class CouplingInfo {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Stream.of(firstClassName,secondClassName).sorted().toList());
+        return Objects.hash(Stream.of(firstClassName,secondClassName).sorted().collect(Collectors.toList()));
     }
 }
