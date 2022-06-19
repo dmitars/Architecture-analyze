@@ -27,7 +27,7 @@ public class MethodsDependency extends Dependency{
     }
 
     public List<String> getMethods() {
-        return methods.stream().map(CtInvocation::getExecutable).map(CtReference::getSimpleName).toList();
+        return methods.stream().map(CtInvocation::getExecutable).map(CtReference::getSimpleName).collect(Collectors.toList());
     }
 
     public boolean hasMethodWithName(String methodName){
@@ -45,7 +45,7 @@ public class MethodsDependency extends Dependency{
             }).collect(Collectors.toSet());
         }
         for(var param:params){
-            if (param.getPackage() == null || param.getQualifiedName().startsWith("java.")){
+            if (param == null || param.getPackage() == null || param.getQualifiedName() == null || param.getQualifiedName().startsWith("java.")){
                 continue;
             }
             for(var method: allowedMethods){

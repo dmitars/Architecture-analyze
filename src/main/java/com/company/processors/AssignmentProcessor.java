@@ -10,7 +10,8 @@ import spoon.reflect.declaration.CtMethod;
 public class AssignmentProcessor extends AbstractProcessor<CtAssignment> {
     @Override
     public void process(CtAssignment element) {
-        if (element.getAssigned() instanceof CtFieldWrite<?> fieldAssigned) {
+        if (element.getAssigned() instanceof CtFieldWrite<?>) {
+            var  fieldAssigned = (CtFieldWrite<?>)element.getAssigned();
             var classType = element.getParent(CtClass.class);
             var method = element.getParent(CtMethod.class);
             if (classType != null && method != null) {

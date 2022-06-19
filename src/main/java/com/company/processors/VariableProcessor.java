@@ -21,6 +21,8 @@ public class VariableProcessor extends AbstractProcessor<CtVariable> {
     }
 
     private void processType(CtTypeReference<?> reference, String parent, boolean isStatic) {
+        if(reference == null)
+            return;
         Graph.addDependencyForClass(parent, reference, isStatic);
         for (var typeParameter : reference.getActualTypeArguments())
             processType(typeParameter, parent, isStatic);
